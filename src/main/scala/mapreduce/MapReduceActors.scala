@@ -66,52 +66,15 @@ class MapReduce[K1,V1,K2,V2,V3](
 
     // En rebre el missatge MapReduceCompute engeguem el procés.
     case MapReduceCompute() =>
-      println("Hem rebut lencarrec")
       client = sender() // Ens apuntem qui ens ha fet l'encàrrec per enviar-li el missatge més tard.
-
-      // farem un mapper per parella (K1,List[V1]) de l'input
-
-      nmappers = input.length
-
-      println("Going to create MAPPERS!!")
-
-      // Al crear actors a dins d'altres actors, enlloc de crear el ActorSystem utilitzarem context i així es va
-      // organitzant la jerarquia d'actors.
-      // D'altra banda, quan els actors que creem tenen un contructor amb paràmetre, no passem el "tipus" de l'actor i prou
-      // a Props sino que creem l'actor amb els paràmetres que necessita. En aquest cas, l'Actor mapping és paramètric en tipus
-      // i necessita com a paràmetre una funció de mapping.
+      nmappers = input.length// farem un mapper per parella (K1,List[V1]) de l'input
 
       val mappers: Seq[ActorRef] = for (i <- 0 until nmappers) yield {
         context.actorOf(Props(new Mapper(mapping)), "mapper" + i)
       }
-      // No és necessari passar els tipus K1,V1, ... ja que els infereix SCALA pel paràmetre mapping
-      // D'altra banda compte pq  "0 until n" és el mateix que "0 to n-1".
-      // val mappers = for (i <- 0 to nmappers-1) yield {
-      //      context.actorOf(Props(new Mapper[K1,V1,K2,V2](mapping)), "mapper"+i)
-      // }
-
-      // Posar les anotacions de tipus aquí no és necessari però ajuda a llegir que
-      // a cada mapper li enviem una clau de tipus K1 i una llista de valors de tipus V1
-
-      // Aquesta versi és quadràtica perquè l'accés a input(i) te cost i mentre
-      // que la versió de sota amb el zipWithIndex senzillament recorre l'input un cop
-      // linealment. AQUEST CANVI ÉS CLAU EN EL RENDIMENT
-      //for(i<- 0 until nmappers) mappers(i) ! toMapper(input(i)._1:K1, input(i)._2: List[V1])
 
       for(((p1,p2),i)<-input.zipWithIndex) mappers(i % nmappers) ! toMapper(p1: K1, p2 :List[V1])
-
-      // Per tant, alternativament...
-      // for(i<- 0 until nmappers) mappers(i) ! toMapper(input(i)._1, input(i)._2)
-
-      // Necessitem controlar quant s'han acabat tots els mappers per poder llençar els reducers després...
       mappersPendents = nmappers
-
-      println("All sent to Mappers, now start listening...")
-
-
-    // Anem rebent les respostes dels mappers i les agrupem al diccionari per clau.
-    // Tornem a necessitar anotar els tipus del paràmetre que reb fromMapper tal com ho hem fet
-    // o be en el codi comentat al generar les tuples.
 
     case fromMapper(list_clau_valor:List[(K2,V2)]) =>
       for ((clau, valor) <- list_clau_valor)
@@ -122,38 +85,22 @@ class MapReduce[K1,V1,K2,V2,V3](
       // Quan ja hem rebut tots els missatges dels mappers:
       if (mappersPendents==0)
       {
-        // creem els reducers, tants com entrades al diccionari; fixeu-vos de nou que fem servir context i fem el new
-        // pel constructor del Reducer amb paràmetres
-        nreducers = dict.size
+        nreducers = dict.size // creem els reducers, tants com entrades al diccionari;
+
         reducersPendents = nreducers // actualitzem els reducers pendents
         val reducers = for (i <- 0 until nreducers) yield
           context.actorOf(Props(new Reducer(reducing)), "reducer"+i)
-        // No cal anotar els tipus ja que els infereix de la funció reducing
-        //context.actorOf(Props(new Reducer[K2,V2,V3](reducing)), "reducer"+i)
-
-        // Ara enviem a cada reducer una clau de tipus V2 i una llista de valors de tipus K2. Les anotacions de tipus
-        // no caldrien perquè ja sabem de quin tipus és dict, però ens ajuden a documentar.
         for ((i,(key:K2, lvalue:List[V2])) <-  (0 until nreducers) zip dict)
           reducers(i) ! toReducer(key, lvalue)
         println("All sent to Reducers")
       }
-
-    // A mesura que anem rebent respostes del reducer, tuples (K2, V3), les anem afegint al Map del resultatfinal i
-    // descomptem reducers pendents. Tornem a necessitar anotar el tipus.
     case fromReducer(entradaDictionari:(K2,V3)) =>
       resultatFinal += entradaDictionari
       reducersPendents -= 1
-
-
-      // En arribar a 0 enviem a qui ens ha encarregat el MapReduce el resultat. De fet l'està esperant pq haurà fet un ask.
       if (reducersPendents == 0) {
         client ! resultatFinal
-        println("All Done from Reducers!")
-        // Ara podem alliberar els recursos dels actors, el propi MapReduce, tots els mappers i els reducers.
-        // Fixem-nos que no te sentit que tornem a engegar "aquest mateix" MapReduce.
         context.stop(self)
       }
   }
 
 }
-
