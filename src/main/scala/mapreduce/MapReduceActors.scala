@@ -45,7 +45,6 @@ class MapReduce[K1,V1,K2,V2,V3](
                                  mapping:(K1,List[V1]) => List[(K2,V2)],
                                  reducing:(K2,List[V2])=> (K2,V3)) extends Actor {
 
-
   var nmappers = 0 // adaptar per poder tenir menys mappers
   var mappersPendents = 0
   var nreducers = 0 // adaptar per poder tenir menys reducers
@@ -59,8 +58,6 @@ class MapReduce[K1,V1,K2,V2,V3](
 
   // Ens apuntem qui ens ha demanat la feina
   var client:ActorRef = null
-
-
 
   def receive: Receive = {
 
