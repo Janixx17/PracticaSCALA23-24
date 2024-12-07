@@ -192,7 +192,7 @@ object Main extends App {
     (result, time)
   }
 
-  
+
 
   for (i <- 1 to 20) { // En aquest primer cas només funciona provar amb un reducer
       val (result, time) = timeMeasurement(numPromigRefPagines(i, 1))
