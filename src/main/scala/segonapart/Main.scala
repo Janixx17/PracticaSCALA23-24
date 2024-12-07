@@ -3,27 +3,16 @@ package segonapart
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.util.Timeout
+
 import scala.concurrent.duration._
 import scala.concurrent.Await
-
-import scala.io.Source
 import mapreduce.ViquipediaParse
-import main.tractaxml
 import mapreduce.ProcessListStrings.getListOfFiles
 import mapreduce._
 
-object Main extends App {
+import javax.management.Query
 
-  class Reducer[K2, V2, V3](reducing: (K2, List[V2]) => (K2, V3)) extends Actor {
-    def receive: Receive = {
-      case toReducer(clau: K2, valor: List[V2]) =>
-        if (valor.nonEmpty) {
-          sender ! fromReducer(reducing(clau, valor))
-        } else {
-          println(s"Reducer amb clau $clau no té valors a processar.")
-        }
-    }
-  }
+object Main extends App {
 
   class MR[K1,V1,K2,V2,V3](
                                    input:List[(K1,List[V1])],
@@ -192,10 +181,41 @@ object Main extends App {
     (result, time)
   }
 
-  
+  def containsQuery(query: String, file: java.io.File): Boolean = {
+    val parsedFile = ViquipediaParse.parseViquipediaFile(file.toString)
+    parsedFile.contingut.contains(query)
+  }
 
-  for (i <- 1 to 20) { // En aquest primer cas només funciona provar amb un reducer
-      val (result, time) = timeMeasurement(numPromigRefPagines(i, 1))
-      println(s"NumMappers: $i, NumReducers: 1, Time: $time")
+  def similarPages(numMapers: Int = 0, numReducers: Int = 0): Unit= {
+    println("Introdueix una query no buida:")
+    val query = scala.io.StdIn.readLine()
+
+    val actorSystem = ActorSystem("reducer-system")
+    val files = getListOfFiles("viqui_files") // nombres de archivos
+    val numfiles = files.length // cantidad de archivos
+    val nFilesMapper = Math.ceil(numfiles.toDouble / numMapers).toInt // funcio mes complexa per asegurar una bona divisio
+
+    val input = files.grouped(nFilesMapper).zipWithIndex.map {
+      case (fileGroup, index) => (index, fileGroup)
+    }.toList
+
+    val mapping = (key: Int, fileList: List[java.io.File]) => {
+      val containsquery = fileList.filter(file => containsQuery(query, file))
+      List((query, containsquery))
+    }
+
+    val reducing = (key: String, values: List[List[java.io.File]]) => {
+      val combinedFiles = values.flatten
+      (key, combinedFiles)
+    }
+
+
+    val mapReduce = actorSystem.actorOf(Props(new MR(input, mapping, reducing, numMapers, numReducers)), "mapReduce")
+
+    implicit val timeout: Timeout = Timeout(10000.seconds)
+    val futureResult = mapReduce ? MapReduceCompute()
+    Await.result(futureResult, timeout.duration)
+    val result = futureResult.value.get.get.asInstanceOf[Map[String, List[java.io.File]]].get(query).get //obtenim la llista de fitxers que contenen la query
+
   }
 }
