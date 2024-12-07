@@ -36,7 +36,7 @@ object ViquipediaParse {
     // elimino les que tenen :
     val filteredRefs = refs.filterNot(_.contains(':'))
 
-    // caldrà eliminar-ne més?
+    // caldrà eliminar-ne més? TODO
 
     //for (r <- refs) println(r)
     //println(refs.length)

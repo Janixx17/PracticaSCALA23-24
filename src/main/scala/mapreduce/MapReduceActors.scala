@@ -70,7 +70,6 @@ class MapReduce[K1,V1,K2,V2,V3](
       client = sender() // Ens apuntem qui ens ha fet l'encàrrec per enviar-li el missatge més tard.
 
       // farem un mapper per parella (K1,List[V1]) de l'input
-
       nmappers = input.length
 
       println("Going to create MAPPERS!!")
@@ -125,6 +124,7 @@ class MapReduce[K1,V1,K2,V2,V3](
         // creem els reducers, tants com entrades al diccionari; fixeu-vos de nou que fem servir context i fem el new
         // pel constructor del Reducer amb paràmetres
         nreducers = dict.size
+
         reducersPendents = nreducers // actualitzem els reducers pendents
         val reducers = for (i <- 0 until nreducers) yield
           context.actorOf(Props(new Reducer(reducing)), "reducer"+i)
